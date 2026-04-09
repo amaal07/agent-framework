@@ -11,7 +11,8 @@ provider "azurerm" {
   features {}
 }
 
-resource "azurerm_resource_group" "infra" {
-  name     = var.resource_group_name
-  location = var.location
+module "resource_group" {
+  source              = "git::https://github.com/aztfmod/terraform-azurerm-caf//modules/resource_group?ref=main"
+  resource_group_name = var.resource_group_name
+  location            = var.location
 }
