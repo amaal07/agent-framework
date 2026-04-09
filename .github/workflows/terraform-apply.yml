@@ -1,0 +1,127 @@
+# Place this file in your infra repo at: .github/workflows/terraform-apply.yml
+#
+# Triggered automatically on push to main (after PR merge) and by the ApplyAgent.
+# Runs `terraform apply` on all changed directories.
+
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "environments/**"
+  workflow_dispatch:
+    inputs:
+      target_dir:
+        description: "Specific directory to apply (leave empty for all changed)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+env:
+  TF_VERSION: "1.7.0"
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+jobs:
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    # environment: production
+    # Uncomment the line above if you are on GitHub Team/Enterprise plan with private repos.
+    # This adds a second GitHub-native approval gate before terraform apply runs.
+    # On GitHub Free plan with private repos, remove it — the agent HITL gate is your approval.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Find Terraform directories to apply
+        id: find-dirs
+        run: |
+          if [ -n "${{ github.event.inputs.target_dir }}" ]; then
+            echo "dirs=${{ github.event.inputs.target_dir }}" >> $GITHUB_OUTPUT
+          else
+            CHANGED_DIRS=$(git diff --name-only HEAD~1...HEAD \
+              | grep '\.tf$' \
+              | xargs -I{} dirname {} \
+              | sort -u \
+              | tr '\n' ' ')
+            echo "dirs=$CHANGED_DIRS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init & Apply
+        id: apply
+        run: |
+          APPLY_OUTPUT=""
+          for dir in ${{ steps.find-dirs.outputs.dirs }}; do
+            echo "Applying: $dir"
+            cd "$dir"
+            terraform init -reconfigure \
+              -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
+              -backend-config="storage_account_name=${{ secrets.TF_STATE_SA }}" \
+              -backend-config="container_name=tfstate" \
+              -backend-config="key=${dir//\//-}.tfstate"
+
+            terraform apply -auto-approve -no-color 2>&1 | tee apply_output.txt
+            APPLY_OUTPUT+=$(cat apply_output.txt)
+            APPLY_OUTPUT+="\n"
+            cd -
+          done
+
+          echo "$APPLY_OUTPUT" > /tmp/combined_apply.txt
+
+      - name: Upload apply output
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-apply-output
+          path: /tmp/combined_apply.txt
+          retention-days: 30
+
+      - name: Post apply result to related PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const applyOutput = fs.readFileSync('/tmp/combined_apply.txt', 'utf8');
+            const isSuccess = applyOutput.includes('Apply complete!');
+
+            // Find the PR that was just merged into main
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: 1,
+            });
+
+            if (prs.data.length > 0) {
+              const pr = prs.data[0];
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: `## Terraform Apply ${isSuccess ? '✅ Succeeded' : '❌ Failed'}\n\n<details><summary>Apply Output</summary>\n\n\`
+  \`\n${applyOutput.slice(0, 60000)}\n\`\n</details>`
+              });
+            }
+      
