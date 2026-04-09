@@ -1,6 +1,6 @@
 variable "naming_prefix" {
   description = "Prefix for all resource names"
-  default     = "<naming_prefix>"
+  default     = "amal"
 }
 variable "region" {
   description = "Azure region"
