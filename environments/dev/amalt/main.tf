@@ -5,16 +5,18 @@ terraform {
   backend "azurerm" {}
 }
 
-provider "azurerm" { features {} }
+provider "azurerm" {
+  features {}
+}
 
 resource "azurerm_resource_group" "main" {
   name     = "AmalRG"
-  location = "East US"
+  location = var.region
 }
 
 resource "azurerm_virtual_network" "main" {
-  name                = "amal-vnet"
-  location            = "East US"
+  name                = "Amal-vnet"
+  location            = var.region
   resource_group_name = azurerm_resource_group.main.name
   address_space       = ["10.0.0.0/16"]
 }
