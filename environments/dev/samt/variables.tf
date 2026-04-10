@@ -1,6 +1,6 @@
 variable "naming_prefix" {
   description = "Prefix for all resource names"
-  default     = "Amal"
+  default     = "example"
 }
 
 variable "region" {
