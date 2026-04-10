@@ -1,4 +1,3 @@
-
 terraform {
   required_providers {
     azurerm = { source = "hashicorp/azurerm", version = "~> 3.0" }
@@ -16,18 +15,22 @@ resource "azurerm_resource_group" "main" {
 }
 
 resource "azurerm_sql_server" "example" {
-  name                         = "${var.naming_prefix}-sqlserver"
+  name                         = "${var.naming_prefix}-sql-server"
   resource_group_name          = azurerm_resource_group.main.name
   location                     = azurerm_resource_group.main.location
   version                      = "12.0"
   administrator_login          = "sqladmin"
-  administrator_login_password = "P@ssword123"
+  administrator_login_password = "Password1234!"
 }
 
 resource "azurerm_sql_database" "example" {
-  name                = "${var.naming_prefix}-sqldb"
+  name                = "${var.naming_prefix}-sql-db"
   resource_group_name = azurerm_resource_group.main.name
-  location           = azurerm_sql_server.example.location
-  server_name        = azurerm_sql_server.example.name
-  requested_service_objective_name = "S0"
+  location            = azurerm_resource_group.main.location
+  server_name         = azurerm_sql_server.example.name
+  sku {
+    name     = "S0"
+    tier     = "Standard"
+    capacity = 10
+  }
 }
