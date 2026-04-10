@@ -14,9 +14,20 @@ resource "azurerm_resource_group" "main" {
   location = var.region
 }
 
-resource "azurerm_virtual_network" "main" {
-  name                = "amaltest-vnet"
-  location            = var.region
+resource "azurerm_sql_server" "main" {
+  name                         = "amaltest-sqlserver"
+  resource_group_name          = azurerm_resource_group.main.name
+  location                     = var.region
+  version                      = "12.0"
+  administrator_login          = "sqladmin"
+  administrator_login_password = "P@ssw0rd123"
+}
+
+resource "azurerm_sql_database" "main" {
+  name                = "amaltest-sqldb"
   resource_group_name = azurerm_resource_group.main.name
-  address_space       = ["10.0.0.0/16"]
+  location            = var.region
+  server_name         = azurerm_sql_server.main.name
+  edition            = "Basic"
+  requested_service_objective_name = "Basic"
 }
