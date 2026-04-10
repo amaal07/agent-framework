@@ -2,6 +2,11 @@ name: Terraform Apply
 
 on:
   workflow_dispatch:
+    inputs:
+      folder:
+        description: "Terraform directory to apply (e.g. environments/dev/myapp)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -30,22 +35,16 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Find Terraform directories
-        id: dirs
-        run: |
-          DIRS=$(find environments -name "*.tf" | xargs -I{} dirname {} | sort -u | tr '\n' ' ')
-          echo "dirs=$DIRS" >> $GITHUB_OUTPUT
-
       - name: Terraform Init & Apply
+        env:
+          TF_DIR: ${{ github.event.inputs.folder }}
         run: |
-          for dir in ${{ steps.dirs.outputs.dirs }}; do
-            echo "=== Applying: $dir ==="
-            cd "$dir"
-            terraform init -reconfigure \
-              -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
-              -backend-config="storage_account_name=${{ secrets.TF_STATE_SA }}" \
-              -backend-config="container_name=tfstate" \
-              -backend-config="key=${dir//\//-}.tfstate"
-            terraform apply -auto-approve -no-color
-            cd $GITHUB_WORKSPACE
-          done
+          echo "=== Applying: $TF_DIR ==="
+          cd "$TF_DIR"
+          KEY="${TF_DIR//\//-}.tfstate"
+          terraform init -reconfigure \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_SA }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=$KEY"
+          terraform apply -auto-approve -no-color
