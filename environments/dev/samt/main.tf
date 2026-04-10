@@ -20,7 +20,7 @@ resource "azurerm_sql_server" "main" {
   location                     = var.region
   version                      = "12.0"
   administrator_login          = "sqladmin"
-  administrator_login_password = "YourStrong!Passw0rd"
+  administrator_login_password = "YourStrong(!)Password"
 }
 
 resource "azurerm_sql_database" "main" {
@@ -28,9 +28,5 @@ resource "azurerm_sql_database" "main" {
   resource_group_name = azurerm_resource_group.main.name
   location            = var.region
   server_name         = azurerm_sql_server.main.name
-  sku {
-    name     = "S0"
-    tier     = "Standard"
-    capacity = 10
-  }
+  requested_service_objective_name = "S1"
 }
